@@ -1,0 +1,50 @@
+name: RosPug CI - Colcon Build & Test
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch: {}
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    container:
+      image: ros:humble-ros-base
+
+    steps:
+      - name: Install git (needed inside the ROS container for checkout)
+        run: |
+          apt-get update
+          apt-get install -y git
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install ROS dependencies via rosdep
+        shell: bash
+        run: |
+          rosdep update --rosdistro humble || true
+          rosdep install --from-paths src --ignore-src -y --rosdistro humble
+
+      - name: Build workspace with colcon
+        shell: bash
+        run: |
+          source /opt/ros/humble/setup.bash
+          colcon build --symlink-install --event-handlers console_direct+
+
+      - name: Run tests with colcon
+        shell: bash
+        run: |
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          colcon test --event-handlers console_direct+
+          colcon test-result --verbose
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: colcon-test-results
+          path: log/
